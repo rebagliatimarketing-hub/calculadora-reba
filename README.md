@@ -6,6 +6,7 @@ Sistema interno para planificar, calcular, validar y aprobar lanzamientos academ
 
 - Login interno con usuario administrador inicial.
 - Catalogos base: especialidades, publicos, tipos de evento, modalidades, certificacion, aulas, Zoom y docentes.
+- Importacion de calendario desde Excel con corte desde julio 2026 en adelante.
 - Creacion de lanzamientos con score comercial ponderado.
 - Estructura academica por modulos, clases, frecuencia y talleres.
 - Generador automatico de sesiones.
@@ -67,3 +68,41 @@ make cache-clear
 ## Variables importantes
 
 No se deben commitear credenciales reales. Usa `.env` para base de datos, correo y usuario administrador. El archivo `.env.example` solo contiene valores de desarrollo.
+
+## Carga de eventos Excel
+
+Los archivos `2026.xlsx` y `2027.xlsx` fueron leidos desde calendario visual, celda por celda. El corte aplicado es desde `2026-07-01` en adelante.
+
+Resultado importado:
+
+- 986 celdas/eventos en total.
+- 942 registros de julio a diciembre 2026.
+- 44 registros de 2027.
+- Cada registro conserva el texto original de la celda en `imported_calendar_events.raw_text`.
+- Tambien se crea un `academic_event` y una `event_session` por celda para que aparezcan en el calendario operativo.
+
+Archivos relevantes:
+
+- `database/seeders/data/calendar_events_july_2026_onward.json`
+- `database/seeders/ImportedCalendarEventSeeder.php`
+- `database/supabase/002_seed_calendar_events_july_2026_onward.sql`
+
+## Supabase
+
+Supabase esta bien para este sistema porque usa PostgreSQL y permite tener una sola base central para calendario, eventos, trazabilidad y reportes.
+
+Cuando tengas el proyecto de Supabase listo:
+
+1. Copia `.env.supabase.example` a `.env`.
+2. Completa `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD` y `APP_KEY`.
+3. Ejecuta:
+
+```bash
+php artisan migrate --seed
+```
+
+Si prefieres usar el SQL Editor de Supabase, primero crea el esquema con las migraciones o con Laravel, y luego ejecuta:
+
+```text
+database/supabase/002_seed_calendar_events_july_2026_onward.sql
+```

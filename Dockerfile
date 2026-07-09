@@ -3,11 +3,12 @@ FROM php:8.2-fpm
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
+    libpq-dev \
     libzip-dev \
     libpng-dev \
     libonig-dev \
     default-mysql-client \
-    && docker-php-ext-install pdo_mysql mbstring zip bcmath \
+    && docker-php-ext-install pdo_mysql pdo_pgsql mbstring zip bcmath \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

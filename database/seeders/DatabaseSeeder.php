@@ -63,7 +63,7 @@ class DatabaseSeeder extends Seeder
             'is_active' => true,
         ]);
 
-        $specialties = collect(['Enfermeria', 'Tecnicos en Enfermeria', 'Obstetricia', 'Medicina', 'Fisioterapia', 'Farmacia', 'Psicologia', 'Odontologia'])
+        $specialties = collect(['Enfermeria', 'Tecnicos en Enfermeria', 'Obstetricia', 'Medicina', 'Fisioterapia', 'Farmacia', 'Laboratorio Clinico', 'Radiologia', 'Psicologia', 'Odontologia', 'Sin clasificar'])
             ->map(fn (string $name) => Specialty::query()->firstOrCreate([
                 'slug' => Str::slug($name),
             ], [
@@ -252,5 +252,7 @@ class DatabaseSeeder extends Seeder
             app(ConflictDetector::class)->detectForEvent($event);
             $event->update(['end_date' => $event->sessions()->max('date')]);
         }
+
+        $this->call(ImportedCalendarEventSeeder::class);
     }
 }
