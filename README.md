@@ -101,8 +101,11 @@ Cuando tengas el proyecto de Supabase listo:
 php artisan migrate --seed
 ```
 
-Si prefieres usar el SQL Editor de Supabase, primero crea el esquema con las migraciones o con Laravel, y luego ejecuta:
+Si prefieres usar el SQL Editor de Supabase, ejecuta los archivos en este orden:
 
 ```text
+database/supabase/001_schema_and_base_catalogs.sql
 database/supabase/002_seed_calendar_events_july_2026_onward.sql
 ```
+
+El archivo `002` solo carga datos. Si se ejecuta antes del `001`, Supabase mostrara errores como `relation "users" does not exist`.
