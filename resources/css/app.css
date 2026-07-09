@@ -1,0 +1,199 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --panel: #fbfbfd;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --line: #d2d2d7;
+    --accent: #0071e3;
+    --accent-soft: #e8f2ff;
+    --danger: #b42318;
+    --warning: #b54708;
+    --success: #027a48;
+    --shadow: 0 18px 55px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #101012;
+        --surface: #1c1c1e;
+        --panel: #242426;
+        --text: #f5f5f7;
+        --muted: #a1a1a6;
+        --line: #3a3a3c;
+        --accent: #0a84ff;
+        --accent-soft: #10243d;
+        --shadow: 0 18px 55px rgba(0, 0, 0, 0.35);
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-weight: 400;
+    letter-spacing: 0;
+}
+
+h1, h2, h3, h4, strong, th {
+    font-weight: 500;
+}
+
+.app-shell {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+.sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+    padding: 24px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+
+.brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: white;
+    display: grid;
+    place-items: center;
+    font-weight: 500;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 10px 12px;
+    transition: background 180ms ease-out, color 180ms ease-out;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.main {
+    padding: 28px;
+}
+
+.panel,
+.card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+}
+
+.panel {
+    border-radius: 16px;
+}
+
+.card {
+    border-radius: 12px;
+}
+
+.btn {
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-weight: 500;
+    transition: transform 120ms ease-out, background 180ms ease-out, border-color 180ms ease-out;
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn-primary {
+    background: var(--accent);
+    color: white;
+}
+
+.btn-secondary {
+    border: 1px solid var(--line);
+    color: var(--text);
+}
+
+.input,
+.select,
+.textarea {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    padding: 10px 12px;
+    outline: none;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.severity-CRITICO,
+.severity-BLOQUEANTE {
+    background: #fee4e2;
+    color: var(--danger);
+}
+
+.severity-ALTO,
+.severity-ADVERTENCIA {
+    background: #fef0c7;
+    color: var(--warning);
+}
+
+.severity-INFO {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+@media (max-width: 900px) {
+    .app-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        position: static;
+        height: auto;
+    }
+
+    .main {
+        padding: 18px;
+    }
+}
