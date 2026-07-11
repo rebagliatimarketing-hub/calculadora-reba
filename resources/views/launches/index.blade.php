@@ -15,7 +15,7 @@
 
     <div class="panel overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm">
+            <table class="data-table data-table-wide w-full text-left text-sm">
                 <thead style="background: var(--panel); color: var(--muted)">
                 <tr>
                     <th class="p-4">Codigo</th>
@@ -40,7 +40,7 @@
                         <td>{{ $launch->score }}/100</td>
                         <td>{{ $launch->academicEvent?->conflicts?->where('status', 'ABIERTO')->count() ?? 0 }}</td>
                         <td><x-status-pill>{{ $launch->status }}</x-status-pill></td>
-                        <td class="pr-4"><a class="btn btn-secondary" href="{{ route('launches.show', $launch) }}">Abrir</a></td>
+                        <td class="pr-4"><a class="btn btn-secondary" href="{{ route('launches.show', $launch) }}">Gestionar</a></td>
                     </tr>
                 @empty
                     <tr><td class="p-8" colspan="9" style="color: var(--muted)">No hay lanzamientos con estos filtros.</td></tr>

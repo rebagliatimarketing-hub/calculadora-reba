@@ -1,5 +1,15 @@
 <x-layouts.app :heading="$launch->commercial_name" :subheading="$launch->code.' · '.$launch->specialty->name.' · '.$launch->audience->name">
     <div class="grid gap-5 xl:grid-cols-[1fr_360px]">
+        @if ($hasBlockingConflicts)
+            <div class="blocking-alert xl:col-span-2" role="alert">
+                <div>
+                    <p class="font-medium">Aprobacion bloqueada por cruce presencial</p>
+                    <p class="mt-1 text-sm">Dos sesiones presenciales coinciden en fecha y horario. Edita la agenda y recalcula antes de continuar.</p>
+                </div>
+                <a class="btn btn-secondary" href="#editar-agenda">Editar agenda</a>
+            </div>
+        @endif
+
         <div class="grid gap-5">
             <section class="panel p-5">
                 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -9,13 +19,16 @@
                         <p class="text-sm" style="color: var(--muted)">Score comercial ponderado</p>
                     </div>
                     <div class="flex flex-wrap gap-2">
+                        @unless ($hasBlockingConflicts)
+                            <a class="btn btn-secondary" href="#editar-agenda">Editar agenda</a>
+                        @endunless
                         <form method="post" action="{{ route('launches.submit-approval', $launch) }}">
                             @csrf
-                            <button class="btn btn-secondary" type="submit">Enviar a aprobacion</button>
+                            <button class="btn btn-secondary" type="submit" @disabled($hasBlockingConflicts) title="{{ $hasBlockingConflicts ? 'Corrige el cruce presencial antes de enviar' : 'Enviar a aprobacion' }}">Enviar a aprobacion</button>
                         </form>
                         <form method="post" action="{{ route('launches.approve', $launch) }}">
                             @csrf
-                            <button class="btn btn-primary" type="submit">Aprobar</button>
+                            <button class="btn btn-primary" type="submit" @disabled($hasBlockingConflicts) title="{{ $hasBlockingConflicts ? 'Corrige el cruce presencial antes de aprobar' : 'Aprobar lanzamiento' }}">Aprobar</button>
                         </form>
                     </div>
                 </div>
@@ -33,7 +46,7 @@
             <section class="panel p-5">
                 <h2 class="text-xl font-medium">Sesiones generadas</h2>
                 <div class="mt-5 overflow-x-auto">
-                    <table class="w-full text-left text-sm">
+                    <table class="data-table w-full text-left text-sm">
                         <thead style="color: var(--muted)">
                         <tr>
                             <th class="py-2">Sesion</th>
@@ -60,8 +73,9 @@
                 </div>
             </section>
 
-            <section class="panel p-5">
-                <h2 class="text-xl font-medium">Regenerar fechas</h2>
+            <section class="panel p-5 scroll-mt-6" id="editar-agenda">
+                <h2 class="text-xl font-medium">Editar agenda</h2>
+                <p class="mt-1 text-sm" style="color: var(--muted)">Ajusta fecha, horario y recursos. Al guardar se regeneran las sesiones y se validan los cruces.</p>
                 <form class="mt-5 grid gap-4 md:grid-cols-4" method="post" action="{{ route('launches.regenerate-sessions', $launch) }}">
                     @csrf
                     <input class="input" name="start_date" type="date" value="{{ $launch->academicEvent->start_date?->toDateString() }}" required>
@@ -104,7 +118,7 @@
             <section class="panel p-5">
                 <h2 class="text-xl font-medium">Conflictos</h2>
                 <div class="mt-4 grid gap-3">
-                    @forelse ($launch->academicEvent->conflicts as $conflict)
+                    @forelse ($launch->academicEvent->conflicts->where('status', 'ABIERTO') as $conflict)
                         <div class="card p-4 shadow-none">
                             <x-status-pill class="severity-{{ $conflict->severity }}">{{ $conflict->severity }}</x-status-pill>
                             <p class="mt-2 text-sm">{{ $conflict->message }}</p>
@@ -136,7 +150,7 @@
             <section class="panel p-5">
                 <h2 class="text-xl font-medium">Correo formal</h2>
                 <p class="mt-3 text-sm font-medium">{{ $emailPreview['subject'] }}</p>
-                <pre class="mt-3 whitespace-pre-wrap rounded-xl p-4 text-xs" style="background: var(--panel); color: var(--muted)">{{ $emailPreview['body'] }}</pre>
+                <pre class="email-preview mt-3 whitespace-pre-wrap rounded-xl p-4 text-xs" style="background: var(--panel); color: var(--muted)">{{ $emailPreview['body'] }}</pre>
             </section>
         </aside>
     </div>

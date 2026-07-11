@@ -8,7 +8,7 @@
                         <h2 class="mt-3 text-xl font-medium">{{ $conflict->academicEvent->name }}</h2>
                         <p class="mt-1 text-sm" style="color: var(--muted)">{{ $conflict->message }}</p>
                     </div>
-                    <form class="flex gap-2" method="post" action="{{ route('conflicts.resolve', $conflict) }}">
+                    <form class="conflict-resolution-form flex gap-2" method="post" action="{{ route('conflicts.resolve', $conflict) }}">
                         @csrf
                         <input class="input w-64" name="resolution_notes" placeholder="Nota de solucion" required>
                         <button class="btn btn-primary" type="submit">Resolver</button>

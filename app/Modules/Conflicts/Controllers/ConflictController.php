@@ -32,6 +32,13 @@ class ConflictController extends Controller
             'resolution_notes' => $data['resolution_notes'],
         ]);
 
+        $event = $conflict->academicEvent;
+
+        if (! $event->conflicts()->where('status', 'ABIERTO')->exists()) {
+            $event->update(['status' => 'TENTATIVO']);
+            $event->launchProposal?->update(['status' => 'PENDIENTE_COORDINACION']);
+        }
+
         return back()->with('status', 'Conflicto marcado como resuelto.');
     }
 }

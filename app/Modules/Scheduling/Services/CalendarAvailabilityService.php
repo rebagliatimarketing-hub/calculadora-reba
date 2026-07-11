@@ -23,11 +23,20 @@ class CalendarAvailabilityService
             foreach (['09:00', '15:00', '19:00'] as $time) {
                 $candidateStart = CarbonImmutable::parse($date->toDateString().' '.$time);
                 $candidateEnd = $candidateStart->addMinutes($duration);
-                $hasOverlap = EventSession::query()
+                $overlapQuery = EventSession::query()
                     ->whereDate('date', $date)
                     ->where('start_time', '<', $candidateEnd->format('H:i:s'))
-                    ->where('end_time', '>', $candidateStart->format('H:i:s'))
-                    ->exists();
+                    ->where('end_time', '>', $candidateStart->format('H:i:s'));
+
+                if ((bool) ($criteria['requires_room'] ?? false)) {
+                    $overlapQuery->whereHas('modality', fn ($query) => $query->where('requires_room', true));
+                } elseif (! empty($criteria['speaker_id'])) {
+                    $overlapQuery->where('speaker_id', $criteria['speaker_id']);
+                } else {
+                    $overlapQuery->whereRaw('1 = 0');
+                }
+
+                $hasOverlap = $overlapQuery->exists();
 
                 if (! $hasOverlap) {
                     $slots->push([

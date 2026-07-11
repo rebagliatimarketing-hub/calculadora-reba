@@ -214,12 +214,17 @@ class LaunchController extends Controller
         return view('launches.show', [
             'launch' => $launch,
             'emailPreview' => $emailComposer->composeLaunchApproval($launch),
+            'hasBlockingConflicts' => $this->hasBlockingConflicts($launch),
             ...$this->catalogs(),
         ]);
     }
 
     public function submitApproval(LaunchProposal $launch, ApprovalWorkflowService $service)
     {
+        if ($this->hasBlockingConflicts($launch)) {
+            return back()->withErrors('No se puede enviar a aprobacion mientras exista un cruce presencial abierto. Corrige la agenda y vuelve a calcular los conflictos.');
+        }
+
         $workflow = ApprovalWorkflow::query()->where('module', 'launches')->where('is_active', true)->firstOrFail();
         $service->submitForApproval($launch, $workflow, auth()->user());
 
@@ -228,6 +233,10 @@ class LaunchController extends Controller
 
     public function approve(LaunchProposal $launch, Request $request, ApprovalWorkflowService $service)
     {
+        if ($this->hasBlockingConflicts($launch)) {
+            return back()->withErrors('La aprobacion esta bloqueada por un cruce presencial abierto.');
+        }
+
         $approvalRequest = $launch->approvalRequests()->latest()->first();
 
         if (! $approvalRequest) {
@@ -290,6 +299,14 @@ class LaunchController extends Controller
     public function previewConflicts(AcademicEvent $event, ConflictDetector $detector)
     {
         return response()->json($detector->detectForEvent($event));
+    }
+
+    private function hasBlockingConflicts(LaunchProposal $launch): bool
+    {
+        return $launch->academicEvent?->conflicts()
+            ->where('status', 'ABIERTO')
+            ->whereHas('rule', fn ($query) => $query->where('is_blocking', true))
+            ->exists() ?? false;
     }
 
     private function catalogs(): array

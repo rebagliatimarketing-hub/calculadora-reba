@@ -2,16 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicEvent;
 use App\Models\AudienceSegment;
 use App\Models\CertificationEntity;
+use App\Models\EventSession;
 use App\Models\EventType;
 use App\Models\LaunchProposal;
 use App\Models\Modality;
 use App\Models\Room;
+use App\Models\SchedulingConflict;
+use App\Models\SchedulingRule;
 use App\Models\Speaker;
 use App\Models\Specialty;
 use App\Models\User;
 use App\Models\ZoomAccount;
+use App\Modules\Scheduling\Services\ConflictDetector;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -26,7 +31,16 @@ class LaunchWorkflowTest extends TestCase
         $this->get('/dashboard')->assertRedirect('/login');
 
         $admin = User::query()->firstOrFail();
-        $this->actingAs($admin)->get('/dashboard')->assertOk()->assertSee('Dashboard de lanzamientos');
+        $response = $this->actingAs($admin)->get('/dashboard');
+
+        $response
+            ->assertOk()
+            ->assertSee('Dashboard de lanzamientos')
+            ->assertSee('data-sidebar-toggle', false)
+            ->assertSee('aria-controls="app-sidebar"', false)
+            ->assertSee('aria-current="page"', false);
+
+        $this->assertSame(1, substr_count($response->getContent(), 'data-sidebar-toggle'));
     }
 
     public function test_marketing_can_create_launch_generate_sessions_and_detect_conflicts(): void
@@ -78,5 +92,135 @@ class LaunchWorkflowTest extends TestCase
         $this->assertNotNull($launch->academicEvent);
         $this->assertGreaterThan(0, $launch->academicEvent->sessions()->count());
         $this->assertGreaterThan(0, $launch->academicEvent->conflicts()->count());
+    }
+
+    public function test_virtual_sessions_can_share_a_schedule_and_zoom_account(): void
+    {
+        $this->seed();
+
+        $source = AcademicEvent::query()->where('code', 'REBA-202609-001')->firstOrFail();
+        $session = $source->sessions()->firstOrFail();
+        $event = $this->duplicateEvent($source, 'REBA-VIRTUAL-TEST', $source->modality_id);
+
+        $event->sessions()->create([
+            ...$this->sessionData($session),
+            'academic_event_id' => $event->id,
+            'speaker_id' => null,
+        ]);
+
+        $conflicts = app(ConflictDetector::class)->detectForEvent($event);
+
+        $this->assertCount(0, $conflicts);
+    }
+
+    public function test_overlapping_presential_sessions_create_a_blocking_conflict(): void
+    {
+        $this->seed();
+
+        $source = AcademicEvent::query()->where('code', 'REBA-202609-001')->firstOrFail();
+        $session = $source->sessions()->firstOrFail();
+        $presential = Modality::query()->firstWhere('slug', 'presencial');
+        $room = Room::query()->firstOrFail();
+
+        foreach (['REBA-PRESENCIAL-A', 'REBA-PRESENCIAL-B'] as $code) {
+            $event = $this->duplicateEvent($source, $code, $presential->id);
+            $event->sessions()->create([
+                ...$this->sessionData($session),
+                'academic_event_id' => $event->id,
+                'modality_id' => $presential->id,
+                'room_id' => $room->id,
+                'zoom_account_id' => null,
+                'speaker_id' => null,
+            ]);
+        }
+
+        $event = AcademicEvent::query()->where('code', 'REBA-PRESENCIAL-B')->firstOrFail();
+        $conflicts = app(ConflictDetector::class)->detectForEvent($event);
+
+        $this->assertTrue($conflicts->contains(fn ($conflict) => $conflict->rule?->code === 'ROOM_OVERLAP'));
+        $this->assertTrue($conflicts->contains(fn ($conflict) => $conflict->severity === 'CRITICO'));
+    }
+
+    public function test_blocking_conflict_prevents_sending_launch_to_approval(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->firstOrFail();
+        $launch = LaunchProposal::query()->where('code', 'REBA-202609-001')->firstOrFail();
+        $session = $launch->academicEvent->sessions()->firstOrFail();
+
+        SchedulingConflict::query()->create([
+            'academic_event_id' => $launch->academicEvent->id,
+            'event_session_id' => $session->id,
+            'rule_id' => SchedulingRule::query()->firstWhere('code', 'ROOM_OVERLAP')->id,
+            'severity' => 'CRITICO',
+            'message' => 'Cruce presencial de prueba.',
+            'status' => 'ABIERTO',
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('launches.submit-approval', $launch));
+
+        $response->assertSessionHasErrors();
+        $this->assertSame(0, $launch->approvalRequests()->count());
+    }
+
+    public function test_resolve_conflict_button_closes_the_alert(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->firstOrFail();
+        $launch = LaunchProposal::query()->where('code', 'REBA-202609-001')->firstOrFail();
+        $session = $launch->academicEvent->sessions()->firstOrFail();
+        $conflict = SchedulingConflict::query()->create([
+            'academic_event_id' => $launch->academicEvent->id,
+            'event_session_id' => $session->id,
+            'rule_id' => SchedulingRule::query()->firstWhere('code', 'ROOM_OVERLAP')->id,
+            'severity' => 'CRITICO',
+            'message' => 'Cruce presencial de prueba.',
+            'status' => 'ABIERTO',
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('conflicts.resolve', $conflict), [
+            'resolution_notes' => 'Agenda corregida y validada.',
+        ]);
+
+        $response->assertSessionHas('status');
+        $this->assertSame('RESUELTO', $conflict->fresh()->status);
+        $this->assertSame($admin->id, $conflict->fresh()->resolved_by);
+        $this->assertSame('PENDIENTE_COORDINACION', $launch->fresh()->status);
+    }
+
+    private function duplicateEvent(AcademicEvent $source, string $code, int $modalityId): AcademicEvent
+    {
+        $event = $source->replicate();
+        $event->launch_proposal_id = null;
+        $event->code = $code;
+        $event->name = $code;
+        $event->short_name = $code;
+        $event->modality_id = $modalityId;
+        $event->save();
+
+        return $event;
+    }
+
+    private function sessionData(EventSession $session): array
+    {
+        return $session->only([
+            'session_number',
+            'module_number',
+            'session_type',
+            'title',
+            'date',
+            'start_time',
+            'end_time',
+            'duration_minutes',
+            'modality_id',
+            'room_id',
+            'zoom_account_id',
+            'speaker_id',
+            'status',
+            'is_holiday',
+            'is_exception',
+        ]);
     }
 }

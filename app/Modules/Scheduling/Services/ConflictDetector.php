@@ -31,34 +31,31 @@ class ConflictDetector
         }
 
         $overlaps = EventSession::query()
-            ->with('academicEvent')
+            ->with('academicEvent.modality')
             ->whereDate('date', $session->date)
             ->where('id', '!=', $session->id)
-            ->where(function ($query) use ($session): void {
-                $query->whereBetween('start_time', [$session->start_time, $session->end_time])
-                    ->orWhereBetween('end_time', [$session->start_time, $session->end_time])
-                    ->orWhere(function ($query) use ($session): void {
-                        $query->where('start_time', '<=', $session->start_time)
-                            ->where('end_time', '>=', $session->end_time);
-                    });
-            })
+            ->where('start_time', '<', $session->end_time)
+            ->where('end_time', '>', $session->start_time)
             ->get();
 
         foreach ($overlaps as $overlap) {
-            if ($session->room_id && $overlap->room_id === $session->room_id) {
-                $conflicts->push($this->createConflict($event, $session, 'ROOM_OVERLAP', 'CRITICO', 'El aula ya esta ocupada por '.$overlap->academicEvent->name.'.', 'Cambiar de aula o mover la sesion a otro turno.', $overlap));
-            }
+            $bothRequireRoom = $event->modality->requires_room
+                && $overlap->academicEvent->modality->requires_room;
 
-            if ($session->zoom_account_id && $overlap->zoom_account_id === $session->zoom_account_id) {
-                $conflicts->push($this->createConflict($event, $session, 'ZOOM_OVERLAP', 'CRITICO', 'La cuenta Zoom ya esta ocupada por '.$overlap->academicEvent->name.'.', 'Asignar otra cuenta Zoom o mover la sesion.', $overlap));
+            if ($bothRequireRoom) {
+                $conflicts->push($this->createConflict(
+                    $event,
+                    $session,
+                    'ROOM_OVERLAP',
+                    'CRITICO',
+                    'Existe un cruce presencial con '.$overlap->academicEvent->name.'.',
+                    'Mover una de las sesiones a otra fecha u horario antes de aprobar.',
+                    $overlap,
+                ));
             }
 
             if ($session->speaker_id && $overlap->speaker_id === $session->speaker_id) {
                 $conflicts->push($this->createConflict($event, $session, 'SPEAKER_OVERLAP', 'ALTO', 'El docente tambien participa en '.$overlap->academicEvent->name.'.', 'Confirmar disponibilidad del docente o cambiar horario.', $overlap));
-            }
-
-            if ($overlap->academicEvent->audience_segment_id === $event->audience_segment_id) {
-                $conflicts->push($this->createConflict($event, $session, 'AUDIENCE_OVERLAP', 'ADVERTENCIA', 'Dos eventos compiten por el mismo publico objetivo.', 'Separar las convocatorias o justificar la simultaneidad.', $overlap));
             }
         }
 

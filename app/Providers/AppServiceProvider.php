@@ -21,8 +21,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $host = request()->getHost();
+        $isLocalHost = in_array($host, ['localhost', '127.0.0.1', '::1'], true);
 
-        if (! $this->app->runningInConsole() && ! str_contains($host, 'localhost')) {
+        if (! $this->app->runningInConsole() && ! $isLocalHost) {
             URL::forceRootUrl('https://'.$host);
             URL::forceScheme('https');
         }

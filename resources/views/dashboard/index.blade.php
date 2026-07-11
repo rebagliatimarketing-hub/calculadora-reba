@@ -1,5 +1,5 @@
 <x-layouts.app heading="Dashboard de lanzamientos" subheading="Lectura rapida de aprobaciones, conflictos, saturacion y proximos inicios.">
-    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+    <section class="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <x-metric-card label="Eventos del mes" :value="$metrics['total']" />
         <x-metric-card label="Aprobados" :value="$metrics['approved']" />
         <x-metric-card label="En revision" :value="$metrics['review']" />
@@ -15,7 +15,7 @@
                 <a class="btn btn-secondary" href="{{ route('calendar.index') }}">Ver calendario</a>
             </div>
             <div class="mt-5 overflow-x-auto">
-                <table class="w-full text-left text-sm">
+                <table class="data-table w-full text-left text-sm">
                     <thead style="color: var(--muted)">
                     <tr>
                         <th class="py-2">Fecha</th>
@@ -27,9 +27,9 @@
                     <tbody>
                     @forelse ($nextSessions as $session)
                         <tr class="border-t" style="border-color: var(--line)">
-                            <td class="py-3">{{ $session->date->format('d/m/Y') }}</td>
+                            <td class="cell-nowrap">{{ $session->date->format('d/m/Y') }}</td>
                             <td>{{ $session->academicEvent->short_name ?: $session->academicEvent->name }}</td>
-                            <td>{{ substr($session->start_time, 0, 5) }} - {{ substr($session->end_time, 0, 5) }}</td>
+                            <td class="cell-nowrap">{{ substr($session->start_time, 0, 5) }} - {{ substr($session->end_time, 0, 5) }}</td>
                             <td>{{ $session->room?->name ?: $session->zoomAccount?->name ?: 'Por asignar' }}</td>
                         </tr>
                     @empty
