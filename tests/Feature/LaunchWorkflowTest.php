@@ -61,7 +61,7 @@ class LaunchWorkflowTest extends TestCase
             ->assertSee('Editar agenda');
 
         $this->actingAs($admin)
-            ->get('/api/calendar/events?start=2026-07-01&end=2026-07-31')
+            ->get('/calendar/events?start=2026-07-01&end=2026-07-31')
             ->assertOk()
             ->assertJsonStructure([['id', 'title', 'date', 'start_time', 'end_time', 'modality', 'resource']]);
     }

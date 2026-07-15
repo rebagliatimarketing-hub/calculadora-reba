@@ -28,9 +28,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/launches/{launch}/regenerate-sessions', [LaunchController::class, 'regenerateSessions'])->name('launches.regenerate-sessions');
 
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
-    Route::get('/api/calendar/events', [CalendarController::class, 'events']);
-    Route::post('/api/events/{event}/preview-schedule', [LaunchController::class, 'previewSchedule']);
-    Route::post('/api/events/{event}/preview-conflicts', [LaunchController::class, 'previewConflicts']);
+    Route::get('/calendar/events', [CalendarController::class, 'events']);
+    Route::post('/events/{event}/preview-schedule', [LaunchController::class, 'previewSchedule']);
+    Route::post('/events/{event}/preview-conflicts', [LaunchController::class, 'previewConflicts']);
     Route::get('/conflicts', [ConflictController::class, 'index'])->name('conflicts.index');
     Route::post('/conflicts/{conflict}/resolve', [ConflictController::class, 'resolve'])->name('conflicts.resolve');
     Route::get('/approvals', [ApprovalController::class, 'index'])->name('approvals.index');
