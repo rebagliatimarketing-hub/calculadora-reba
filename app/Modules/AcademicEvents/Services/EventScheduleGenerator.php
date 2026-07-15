@@ -17,6 +17,10 @@ class EventScheduleGenerator
 
         $structure = $event->structure;
         $classesCount = $structure?->classes_count ?: 1;
+        $holidays = Holiday::query()
+            ->pluck('date')
+            ->map(fn ($date) => CarbonImmutable::parse($date)->toDateString())
+            ->flip();
         $sessions = collect();
         $currentDate = $this->nextAllowedDate($options->startDate, $options->allowedWeekdays);
 
@@ -39,7 +43,7 @@ class EventScheduleGenerator
                 'zoom_account_id' => $event->modality->requires_zoom ? $options->zoomAccountId : null,
                 'speaker_id' => $options->speakerId,
                 'status' => 'TENTATIVA',
-                'is_holiday' => Holiday::query()->whereDate('date', $currentDate->toDateString())->exists(),
+                'is_holiday' => $holidays->has($currentDate->toDateString()),
                 'is_exception' => false,
             ]);
 
@@ -64,7 +68,7 @@ class EventScheduleGenerator
                 'zoom_account_id' => $structure->has_virtual_workshops ? $options->zoomAccountId : null,
                 'speaker_id' => $options->speakerId,
                 'status' => 'TENTATIVA',
-                'is_holiday' => Holiday::query()->whereDate('date', $workshopDate->toDateString())->exists(),
+                'is_holiday' => $holidays->has($workshopDate->toDateString()),
                 'is_exception' => false,
             ]);
         }
@@ -76,7 +80,20 @@ class EventScheduleGenerator
     {
         EventSession::query()->where('academic_event_id', $event->id)->delete();
 
-        return $this->generate($event, $options)->map(fn (array $session) => EventSession::query()->create($session));
+        $now = now();
+        $sessions = $this->generate($event, $options)
+            ->map(fn (array $session) => [
+                ...$session,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        EventSession::query()->insert($sessions->all());
+
+        return EventSession::query()
+            ->where('academic_event_id', $event->id)
+            ->orderBy('session_number')
+            ->get();
     }
 
     private function nextAllowedDate(CarbonImmutable $date, array $allowedWeekdays): CarbonImmutable

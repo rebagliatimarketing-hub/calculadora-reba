@@ -28,9 +28,9 @@
                     @forelse ($nextSessions as $session)
                         <tr class="border-t" style="border-color: var(--line)">
                             <td class="cell-nowrap">{{ $session->date->format('d/m/Y') }}</td>
-                            <td>{{ $session->academicEvent->short_name ?: $session->academicEvent->name }}</td>
+                            <td>{{ $session->event_name }}</td>
                             <td class="cell-nowrap">{{ substr($session->start_time, 0, 5) }} - {{ substr($session->end_time, 0, 5) }}</td>
-                            <td>{{ $session->room?->name ?: $session->zoomAccount?->name ?: 'Por asignar' }}</td>
+                            <td>{{ $session->room_name ?: $session->zoom_name ?: 'Por asignar' }}</td>
                         </tr>
                     @empty
                         <tr><td class="py-6" colspan="4" style="color: var(--muted)">No hay sesiones proximas.</td></tr>
@@ -47,7 +47,7 @@
                     @foreach ($saturationBySpecialty as $item)
                         <div>
                             <div class="flex justify-between text-sm">
-                                <span>{{ $item->specialty->name }}</span>
+                                <span>{{ $item->specialty_name }}</span>
                                 <span>{{ $item->total }}</span>
                             </div>
                             <div class="mt-2 h-2 rounded-full" style="background: var(--accent-soft)">
@@ -65,7 +65,7 @@
                         <div class="card p-4 shadow-none">
                             <x-status-pill class="severity-{{ $conflict->severity }}">{{ $conflict->severity }}</x-status-pill>
                             <p class="mt-2 text-sm">{{ $conflict->message }}</p>
-                            <p class="mt-1 text-xs" style="color: var(--muted)">{{ $conflict->academicEvent->name }}</p>
+                            <p class="mt-1 text-xs" style="color: var(--muted)">{{ $conflict->event_name }}</p>
                         </div>
                     @empty
                         <p class="text-sm" style="color: var(--muted)">No hay conflictos criticos abiertos.</p>

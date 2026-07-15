@@ -12,15 +12,15 @@ class ReportController extends Controller
     public function monthly()
     {
         $eventsByModality = AcademicEvent::query()
-            ->select('modality_id', DB::raw('count(*) as total'))
-            ->with('modality')
-            ->groupBy('modality_id')
+            ->join('modalities', 'modalities.id', '=', 'academic_events.modality_id')
+            ->select('academic_events.modality_id', 'modalities.name as modality_name', DB::raw('count(*) as total'))
+            ->groupBy('academic_events.modality_id', 'modalities.name')
             ->get();
 
         $eventsBySpecialty = AcademicEvent::query()
-            ->select('specialty_id', DB::raw('count(*) as total'))
-            ->with('specialty')
-            ->groupBy('specialty_id')
+            ->join('specialties', 'specialties.id', '=', 'academic_events.specialty_id')
+            ->select('academic_events.specialty_id', 'specialties.name as specialty_name', DB::raw('count(*) as total'))
+            ->groupBy('academic_events.specialty_id', 'specialties.name')
             ->orderByDesc('total')
             ->get();
 

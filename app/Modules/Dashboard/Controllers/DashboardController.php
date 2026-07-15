@@ -5,7 +5,6 @@ namespace App\Modules\Dashboard\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicEvent;
 use App\Models\EventSession;
-use App\Models\LaunchProposal;
 use App\Models\SchedulingConflict;
 use Illuminate\Support\Facades\DB;
 
@@ -16,35 +15,69 @@ class DashboardController extends Controller
         $month = now()->month;
         $year = now()->year;
 
-        $metrics = [
-            'total' => LaunchProposal::query()->whereHas('cycle', fn ($query) => $query->where('month', $month)->where('year', $year))->count(),
-            'approved' => LaunchProposal::query()->where('status', 'APROBADO_FINAL')->count(),
-            'review' => LaunchProposal::query()->whereIn('status', ['PENDIENTE_COORDINACION', 'PENDIENTE_ACADEMICA', 'PENDIENTE_APROBACION_FINAL'])->count(),
-            'conflicts' => SchedulingConflict::query()->where('status', 'ABIERTO')->count(),
-            'presential' => AcademicEvent::query()->whereHas('modality', fn ($query) => $query->where('requires_room', true))->count(),
-            'virtual' => AcademicEvent::query()->whereHas('modality', fn ($query) => $query->where('requires_zoom', true))->count(),
-        ];
+        $metrics = (array) DB::query()->selectRaw('(
+                select count(*)
+                from launch_proposals
+                inner join launch_cycles on launch_cycles.id = launch_proposals.launch_cycle_id
+                where launch_cycles.month = ? and launch_cycles.year = ?
+            ) as total,
+            (select count(*) from launch_proposals where status = ?) as approved,
+            (select count(*) from launch_proposals where status in (?, ?, ?)) as review,
+            (select count(*) from scheduling_conflicts where status = ?) as conflicts,
+            (
+                select count(*)
+                from academic_events
+                inner join modalities on modalities.id = academic_events.modality_id
+                where modalities.requires_room = ? and academic_events.deleted_at is null
+            ) as presential,
+            (
+                select count(*)
+                from academic_events
+                inner join modalities on modalities.id = academic_events.modality_id
+                where modalities.requires_zoom = ? and academic_events.deleted_at is null
+            ) as virtual', [
+            $month,
+            $year,
+            'APROBADO_FINAL',
+            'PENDIENTE_COORDINACION',
+            'PENDIENTE_ACADEMICA',
+            'PENDIENTE_APROBACION_FINAL',
+            'ABIERTO',
+            true,
+            true,
+        ])->first();
 
         $nextSessions = EventSession::query()
-            ->with(['academicEvent', 'room', 'zoomAccount'])
-            ->whereDate('date', '>=', now()->toDateString())
-            ->orderBy('date')
+            ->join('academic_events', 'academic_events.id', '=', 'event_sessions.academic_event_id')
+            ->leftJoin('rooms', 'rooms.id', '=', 'event_sessions.room_id')
+            ->leftJoin('zoom_accounts', 'zoom_accounts.id', '=', 'event_sessions.zoom_account_id')
+            ->where('event_sessions.date', '>=', now()->toDateString())
+            ->whereNull('academic_events.deleted_at')
+            ->select([
+                'event_sessions.*',
+                DB::raw('coalesce(academic_events.short_name, academic_events.name) as event_name'),
+                'rooms.name as room_name',
+                'zoom_accounts.name as zoom_name',
+            ])
+            ->orderBy('event_sessions.date')
+            ->orderBy('event_sessions.start_time')
             ->limit(8)
             ->get();
 
         $saturationBySpecialty = AcademicEvent::query()
-            ->select('specialty_id', DB::raw('count(*) as total'))
-            ->with('specialty')
-            ->groupBy('specialty_id')
+            ->join('specialties', 'specialties.id', '=', 'academic_events.specialty_id')
+            ->select('academic_events.specialty_id', 'specialties.name as specialty_name', DB::raw('count(*) as total'))
+            ->groupBy('academic_events.specialty_id', 'specialties.name')
             ->orderByDesc('total')
             ->limit(6)
             ->get();
 
         $criticalConflicts = SchedulingConflict::query()
-            ->with(['academicEvent', 'session'])
-            ->whereIn('severity', ['CRITICO', 'BLOQUEANTE'])
-            ->where('status', 'ABIERTO')
-            ->latest()
+            ->join('academic_events', 'academic_events.id', '=', 'scheduling_conflicts.academic_event_id')
+            ->whereIn('scheduling_conflicts.severity', ['CRITICO', 'BLOQUEANTE'])
+            ->where('scheduling_conflicts.status', 'ABIERTO')
+            ->select('scheduling_conflicts.*', 'academic_events.name as event_name')
+            ->latest('scheduling_conflicts.created_at')
             ->limit(6)
             ->get();
 

@@ -34,11 +34,11 @@
                     <tr class="border-t" style="border-color: var(--line)">
                         <td class="p-4">{{ $launch->code }}</td>
                         <td>{{ $launch->commercial_name }}</td>
-                        <td>{{ $launch->eventType->name }}</td>
-                        <td>{{ $launch->modality->name }}</td>
-                        <td>{{ $launch->specialty->name }}</td>
+                        <td>{{ $launch->event_type_name }}</td>
+                        <td>{{ $launch->modality_name }}</td>
+                        <td>{{ $launch->specialty_name }}</td>
                         <td>{{ $launch->score }}/100</td>
-                        <td>{{ $launch->academicEvent?->conflicts?->where('status', 'ABIERTO')->count() ?? 0 }}</td>
+                        <td>{{ $launch->open_conflicts_count }}</td>
                         <td><x-status-pill>{{ $launch->status }}</x-status-pill></td>
                         <td class="pr-4"><a class="btn btn-secondary" href="{{ route('launches.show', $launch) }}">Gestionar</a></td>
                     </tr>

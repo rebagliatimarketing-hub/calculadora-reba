@@ -4,6 +4,7 @@ namespace App\Modules\Conflicts\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\SchedulingConflict;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 
 class ConflictController extends Controller
@@ -11,10 +12,26 @@ class ConflictController extends Controller
     public function index()
     {
         $conflicts = SchedulingConflict::query()
-            ->with(['academicEvent', 'session.room', 'session.zoomAccount', 'rule'])
-            ->where('status', 'ABIERTO')
-            ->latest()
+            ->join('academic_events', 'academic_events.id', '=', 'scheduling_conflicts.academic_event_id')
+            ->leftJoin('event_sessions', 'event_sessions.id', '=', 'scheduling_conflicts.event_session_id')
+            ->leftJoin('scheduling_rules', 'scheduling_rules.id', '=', 'scheduling_conflicts.rule_id')
+            ->where('scheduling_conflicts.status', 'ABIERTO')
+            ->select([
+                'scheduling_conflicts.*',
+                'academic_events.name as event_name',
+                'event_sessions.date as session_date',
+                'event_sessions.start_time as session_start_time',
+                'event_sessions.end_time as session_end_time',
+                'scheduling_rules.name as rule_name',
+            ])
+            ->latest('scheduling_conflicts.created_at')
             ->paginate(15);
+
+        $conflicts->getCollection()->each(function (SchedulingConflict $conflict): void {
+            $conflict->session_date = $conflict->session_date
+                ? CarbonImmutable::parse($conflict->session_date)
+                : null;
+        });
 
         return view('conflicts.index', compact('conflicts'));
     }

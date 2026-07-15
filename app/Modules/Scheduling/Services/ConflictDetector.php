@@ -12,61 +12,117 @@ class ConflictDetector
 {
     public function detectForEvent(AcademicEvent $event): Collection
     {
-        $event->loadMissing(['sessions', 'modality', 'audience', 'specialty']);
+        $event->load(['sessions', 'modality']);
         SchedulingConflict::query()->where('academic_event_id', $event->id)->where('status', 'ABIERTO')->delete();
 
-        return $event->sessions->flatMap(fn (EventSession $session) => $this->detectForSession($event, $session));
-    }
-
-    private function detectForSession(AcademicEvent $event, EventSession $session): Collection
-    {
-        $conflicts = collect();
-
-        if ($session->is_holiday && $event->modality->requires_room) {
-            $conflicts->push($this->createConflict($event, $session, 'HOLIDAY_PRESENTIAL', 'BLOQUEANTE', 'La sesion presencial cae en feriado.', 'Mover la sesion al siguiente fin de semana disponible.'));
+        if ($event->sessions->isEmpty()) {
+            return collect();
         }
 
-        if (! in_array((int) $session->date->isoWeekday(), [5, 6, 7], true)) {
-            $conflicts->push($this->createConflict($event, $session, 'WEAK_WEEKDAY', 'ADVERTENCIA', 'La sesion esta programada fuera de viernes, sabado o domingo.', 'Validar si el publico objetivo puede asistir en este dia.'));
-        }
+        $rules = SchedulingRule::query()
+            ->whereIn('code', ['HOLIDAY_PRESENTIAL', 'WEAK_WEEKDAY', 'ROOM_OVERLAP', 'SPEAKER_OVERLAP'])
+            ->get()
+            ->keyBy('code');
 
-        $overlaps = EventSession::query()
-            ->with('academicEvent.modality')
-            ->whereDate('date', $session->date)
-            ->where('id', '!=', $session->id)
-            ->where('start_time', '<', $session->end_time)
-            ->where('end_time', '>', $session->start_time)
+        $sessionDates = $event->sessions->pluck('date')->map->toDateString()->sort()->values();
+
+        $overlapsByDate = EventSession::query()
+            ->join('academic_events', 'academic_events.id', '=', 'event_sessions.academic_event_id')
+            ->join('modalities', 'modalities.id', '=', 'academic_events.modality_id')
+            ->whereDate('event_sessions.date', '>=', $sessionDates->first())
+            ->whereDate('event_sessions.date', '<=', $sessionDates->last())
+            ->where('event_sessions.academic_event_id', '!=', $event->id)
+            ->whereNull('academic_events.deleted_at')
+            ->select([
+                'event_sessions.*',
+                'academic_events.name as event_name',
+                'modalities.requires_room as event_requires_room',
+            ])
             ->get();
 
-        foreach ($overlaps as $overlap) {
-            $bothRequireRoom = $event->modality->requires_room
-                && $overlap->academicEvent->modality->requires_room;
+        $overlapsByDate = $overlapsByDate->groupBy(fn (EventSession $session) => $session->date->toDateString());
+        $rows = collect();
 
-            if ($bothRequireRoom) {
-                $conflicts->push($this->createConflict(
+        foreach ($event->sessions as $session) {
+            if ($session->is_holiday && $event->modality->requires_room) {
+                $rows->push($this->conflictData(
                     $event,
                     $session,
-                    'ROOM_OVERLAP',
-                    'CRITICO',
-                    'Existe un cruce presencial con '.$overlap->academicEvent->name.'.',
-                    'Mover una de las sesiones a otra fecha u horario antes de aprobar.',
-                    $overlap,
+                    $rules->get('HOLIDAY_PRESENTIAL'),
+                    'BLOQUEANTE',
+                    'La sesion presencial cae en feriado.',
+                    'Mover la sesion al siguiente fin de semana disponible.',
                 ));
             }
 
-            if ($session->speaker_id && $overlap->speaker_id === $session->speaker_id) {
-                $conflicts->push($this->createConflict($event, $session, 'SPEAKER_OVERLAP', 'ALTO', 'El docente tambien participa en '.$overlap->academicEvent->name.'.', 'Confirmar disponibilidad del docente o cambiar horario.', $overlap));
+            if (! in_array((int) $session->date->isoWeekday(), [5, 6, 7], true)) {
+                $rows->push($this->conflictData(
+                    $event,
+                    $session,
+                    $rules->get('WEAK_WEEKDAY'),
+                    'ADVERTENCIA',
+                    'La sesion esta programada fuera de viernes, sabado o domingo.',
+                    'Validar si el publico objetivo puede asistir en este dia.',
+                ));
+            }
+
+            $overlaps = $overlapsByDate
+                ->get($session->date->toDateString(), collect())
+                ->filter(fn (EventSession $overlap) => $overlap->start_time < $session->end_time
+                    && $overlap->end_time > $session->start_time);
+
+            foreach ($overlaps as $overlap) {
+                $bothRequireRoom = $event->modality->requires_room && $overlap->event_requires_room;
+
+                if ($bothRequireRoom) {
+                    $rows->push($this->conflictData(
+                        $event,
+                        $session,
+                        $rules->get('ROOM_OVERLAP'),
+                        'CRITICO',
+                        'Existe un cruce presencial con '.$overlap->event_name.'.',
+                        'Mover una de las sesiones a otra fecha u horario antes de aprobar.',
+                        $overlap,
+                    ));
+                }
+
+                if ($session->speaker_id && $overlap->speaker_id === $session->speaker_id) {
+                    $rows->push($this->conflictData(
+                        $event,
+                        $session,
+                        $rules->get('SPEAKER_OVERLAP'),
+                        'ALTO',
+                        'El docente tambien participa en '.$overlap->event_name.'.',
+                        'Confirmar disponibilidad del docente o cambiar horario.',
+                        $overlap,
+                    ));
+                }
             }
         }
 
-        return $conflicts;
+        if ($rows->isNotEmpty()) {
+            SchedulingConflict::query()->insert($rows->all());
+        }
+
+        return SchedulingConflict::query()
+            ->with('rule')
+            ->where('academic_event_id', $event->id)
+            ->where('status', 'ABIERTO')
+            ->get();
     }
 
-    private function createConflict(AcademicEvent $event, EventSession $session, string $ruleCode, string $severity, string $message, string $recommendation, ?EventSession $overlap = null): SchedulingConflict
-    {
-        $rule = SchedulingRule::query()->firstWhere('code', $ruleCode);
+    private function conflictData(
+        AcademicEvent $event,
+        EventSession $session,
+        ?SchedulingRule $rule,
+        string $severity,
+        string $message,
+        string $recommendation,
+        ?EventSession $overlap = null,
+    ): array {
+        $now = now();
 
-        return SchedulingConflict::query()->create([
+        return [
             'academic_event_id' => $event->id,
             'event_session_id' => $session->id,
             'conflict_event_id' => $overlap?->academic_event_id,
@@ -76,6 +132,8 @@ class ConflictDetector
             'message' => $message,
             'recommendation' => $recommendation,
             'status' => 'ABIERTO',
-        ]);
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
     }
 }

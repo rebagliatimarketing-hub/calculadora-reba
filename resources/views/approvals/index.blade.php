@@ -5,8 +5,8 @@
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <x-status-pill>{{ $request->status }}</x-status-pill>
-                        <h2 class="mt-3 text-xl font-medium">{{ $request->approvable->commercial_name ?? 'Solicitud' }}</h2>
-                        <p class="text-sm" style="color: var(--muted)">{{ $request->workflow->name }}</p>
+                        <h2 class="mt-3 text-xl font-medium">{{ $request->approvable_name ?: 'Solicitud' }}</h2>
+                        <p class="text-sm" style="color: var(--muted)">{{ $request->workflow_name }}</p>
                     </div>
                     <p class="text-sm" style="color: var(--muted)">{{ $request->requested_at?->format('d/m/Y H:i') }}</p>
                 </div>

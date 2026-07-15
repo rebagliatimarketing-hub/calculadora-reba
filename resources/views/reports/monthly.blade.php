@@ -4,7 +4,7 @@
             <h2 class="text-xl font-medium">Modalidad</h2>
             <div class="mt-4 grid gap-3">
                 @foreach ($eventsByModality as $item)
-                    <div class="flex justify-between text-sm"><span>{{ $item->modality->name }}</span><span>{{ $item->total }}</span></div>
+                    <div class="flex justify-between text-sm"><span>{{ $item->modality_name }}</span><span>{{ $item->total }}</span></div>
                 @endforeach
             </div>
         </section>
@@ -13,7 +13,7 @@
             <h2 class="text-xl font-medium">Especialidad</h2>
             <div class="mt-4 grid gap-3">
                 @foreach ($eventsBySpecialty as $item)
-                    <div class="flex justify-between text-sm"><span>{{ $item->specialty->name }}</span><span>{{ $item->total }}</span></div>
+                    <div class="flex justify-between text-sm"><span>{{ $item->specialty_name }}</span><span>{{ $item->total }}</span></div>
                 @endforeach
             </div>
         </section>

@@ -43,6 +43,29 @@ class LaunchWorkflowTest extends TestCase
         $this->assertSame(1, substr_count($response->getContent(), 'data-sidebar-toggle'));
     }
 
+    public function test_operational_modules_and_launch_detail_load_for_admin(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->firstOrFail();
+        $launch = LaunchProposal::query()->firstOrFail();
+
+        foreach (['/launches', '/calendar', '/conflicts', '/approvals', '/reports/monthly'] as $path) {
+            $this->actingAs($admin)->get($path)->assertOk();
+        }
+
+        $this->actingAs($admin)
+            ->get(route('launches.show', $launch))
+            ->assertOk()
+            ->assertSee($launch->commercial_name)
+            ->assertSee('Editar agenda');
+
+        $this->actingAs($admin)
+            ->get('/api/calendar/events?start=2026-07-01&end=2026-07-31')
+            ->assertOk()
+            ->assertJsonStructure([['id', 'title', 'date', 'start_time', 'end_time', 'modality', 'resource']]);
+    }
+
     public function test_marketing_can_create_launch_generate_sessions_and_detect_conflicts(): void
     {
         $this->seed();

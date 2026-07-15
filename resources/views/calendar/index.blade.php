@@ -24,15 +24,15 @@
                         </div>
                         <div class="mt-3 grid gap-2">
                             @foreach ($sessions[$day->toDateString()] ?? [] as $session)
-                                @if ($session->academicEvent->launch_proposal_id)
-                                    <a class="rounded-lg p-2 text-left text-xs block" style="background: var(--accent-soft); color: var(--accent)" href="{{ route('launches.show', $session->academicEvent->launch_proposal_id) }}">
-                                        <span class="block font-medium">{{ $session->academicEvent->short_name ?: $session->academicEvent->name }}</span>
-                                        <span>{{ substr($session->start_time, 0, 5) }} &middot; {{ $session->academicEvent->modality->name }}</span>
+                                @if ($session->launch_proposal_id)
+                                    <a class="rounded-lg p-2 text-left text-xs block" style="background: var(--accent-soft); color: var(--accent)" href="{{ route('launches.show', $session->launch_proposal_id) }}">
+                                        <span class="block font-medium">{{ $session->event_name }}</span>
+                                        <span>{{ substr($session->start_time, 0, 5) }} &middot; {{ $session->modality_name }}</span>
                                     </a>
                                 @else
                                     <div class="rounded-lg p-2 text-left text-xs" style="background: var(--panel); color: var(--text); border: 1px solid var(--line)">
-                                        <span class="block font-medium">{{ $session->academicEvent->short_name ?: $session->academicEvent->name }}</span>
-                                        <span style="color: var(--muted)">{{ substr($session->start_time, 0, 5) }} &middot; {{ $session->academicEvent->modality->name }} &middot; Importado</span>
+                                        <span class="block font-medium">{{ $session->event_name }}</span>
+                                        <span style="color: var(--muted)">{{ substr($session->start_time, 0, 5) }} &middot; {{ $session->modality_name }} &middot; Importado</span>
                                     </div>
                                 @endif
                             @endforeach

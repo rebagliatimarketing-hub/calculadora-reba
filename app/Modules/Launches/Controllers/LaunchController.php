@@ -4,17 +4,20 @@ namespace App\Modules\Launches\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicEvent;
+use App\Models\ApprovalLog;
 use App\Models\ApprovalWorkflow;
 use App\Models\AudienceSegment;
 use App\Models\CampaignHandoff;
 use App\Models\CertificationEntity;
 use App\Models\EventAcademicStructure;
+use App\Models\EventSession;
 use App\Models\EventType;
 use App\Models\LaunchCycle;
 use App\Models\LaunchProposal;
 use App\Models\LaunchResearchSource;
 use App\Models\Modality;
 use App\Models\Room;
+use App\Models\SchedulingConflict;
 use App\Models\Speaker;
 use App\Models\Specialty;
 use App\Models\ZoomAccount;
@@ -33,10 +36,26 @@ class LaunchController extends Controller
     public function index(Request $request)
     {
         $launches = LaunchProposal::query()
-            ->with(['cycle', 'specialty', 'audience', 'eventType', 'modality', 'academicEvent.conflicts'])
-            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->status))
-            ->when($request->filled('month'), fn ($query) => $query->whereHas('cycle', fn ($cycle) => $cycle->where('month', $request->month)))
-            ->latest()
+            ->join('launch_cycles', 'launch_cycles.id', '=', 'launch_proposals.launch_cycle_id')
+            ->join('specialties', 'specialties.id', '=', 'launch_proposals.specialty_id')
+            ->join('event_types', 'event_types.id', '=', 'launch_proposals.event_type_id')
+            ->join('modalities', 'modalities.id', '=', 'launch_proposals.modality_id')
+            ->select([
+                'launch_proposals.*',
+                'specialties.name as specialty_name',
+                'event_types.name as event_type_name',
+                'modalities.name as modality_name',
+            ])
+            ->selectSub(function ($query): void {
+                $query->from('scheduling_conflicts')
+                    ->join('academic_events', 'academic_events.id', '=', 'scheduling_conflicts.academic_event_id')
+                    ->whereColumn('academic_events.launch_proposal_id', 'launch_proposals.id')
+                    ->where('scheduling_conflicts.status', 'ABIERTO')
+                    ->selectRaw('count(*)');
+            }, 'open_conflicts_count')
+            ->when($request->filled('status'), fn ($query) => $query->where('launch_proposals.status', $request->status))
+            ->when($request->filled('month'), fn ($query) => $query->where('launch_cycles.month', $request->integer('month')))
+            ->latest('launch_proposals.created_at')
             ->paginate(12)
             ->withQueryString();
 
@@ -193,29 +212,79 @@ class LaunchController extends Controller
         return redirect()->route('launches.show', $launch)->with('status', 'Lanzamiento creado, calendarizado y validado.');
     }
 
-    public function show(LaunchProposal $launch, FormalEmailComposer $emailComposer)
+    public function show(int $launch, FormalEmailComposer $emailComposer)
     {
-        $launch->load([
-            'cycle',
-            'specialty',
-            'audience',
-            'eventType',
-            'modality',
-            'certification',
-            'researchSources',
-            'academicEvent.structure',
-            'academicEvent.sessions.room',
-            'academicEvent.sessions.zoomAccount',
-            'academicEvent.sessions.speaker',
-            'academicEvent.conflicts.session',
-            'approvalRequests.logs',
-        ]);
+        $launch = LaunchProposal::query()
+            ->join('specialties', 'specialties.id', '=', 'launch_proposals.specialty_id')
+            ->join('audience_segments', 'audience_segments.id', '=', 'launch_proposals.audience_segment_id')
+            ->join('event_types', 'event_types.id', '=', 'launch_proposals.event_type_id')
+            ->join('modalities', 'modalities.id', '=', 'launch_proposals.modality_id')
+            ->select([
+                'launch_proposals.*',
+                'specialties.name as specialty_name',
+                'audience_segments.name as audience_name',
+                'event_types.name as event_type_name',
+                'modalities.name as modality_name',
+            ])
+            ->findOrFail($launch);
+
+        $event = AcademicEvent::query()
+            ->leftJoin('event_academic_structures', 'event_academic_structures.academic_event_id', '=', 'academic_events.id')
+            ->where('academic_events.launch_proposal_id', $launch->id)
+            ->select([
+                'academic_events.*',
+                'event_academic_structures.frequency_type as structure_frequency_type',
+                'event_academic_structures.class_duration_minutes as structure_class_duration_minutes',
+            ])
+            ->firstOrFail();
+
+        $sessions = EventSession::query()
+            ->join('modalities', 'modalities.id', '=', 'event_sessions.modality_id')
+            ->leftJoin('rooms', 'rooms.id', '=', 'event_sessions.room_id')
+            ->leftJoin('zoom_accounts', 'zoom_accounts.id', '=', 'event_sessions.zoom_account_id')
+            ->where('event_sessions.academic_event_id', $event->id)
+            ->select([
+                'event_sessions.*',
+                'modalities.name as modality_name',
+                'rooms.name as room_name',
+                'zoom_accounts.name as zoom_name',
+            ])
+            ->orderBy('event_sessions.date')
+            ->orderBy('event_sessions.start_time')
+            ->get();
+
+        $conflicts = SchedulingConflict::query()
+            ->leftJoin('scheduling_rules', 'scheduling_rules.id', '=', 'scheduling_conflicts.rule_id')
+            ->where('scheduling_conflicts.academic_event_id', $event->id)
+            ->where('scheduling_conflicts.status', 'ABIERTO')
+            ->select('scheduling_conflicts.*', 'scheduling_rules.is_blocking as rule_is_blocking')
+            ->latest('scheduling_conflicts.created_at')
+            ->get();
+
+        $approvalLogs = ApprovalLog::query()
+            ->join('approval_requests', 'approval_requests.id', '=', 'approval_logs.approval_request_id')
+            ->where('approval_requests.approvable_type', LaunchProposal::class)
+            ->where('approval_requests.approvable_id', $launch->id)
+            ->select('approval_logs.*', 'approval_requests.status as request_status')
+            ->orderBy('approval_logs.created_at')
+            ->get();
+
+        $resources = $this->schedulingCatalogs();
+        $scheduledWeekdays = $sessions->map(fn (EventSession $session) => $session->date->isoWeekday())->unique()->all();
 
         return view('launches.show', [
             'launch' => $launch,
-            'emailPreview' => $emailComposer->composeLaunchApproval($launch),
-            'hasBlockingConflicts' => $this->hasBlockingConflicts($launch),
-            ...$this->catalogs(),
+            'event' => $event,
+            'sessions' => $sessions,
+            'conflicts' => $conflicts,
+            'approvalLogs' => $approvalLogs,
+            'emailPreview' => $emailComposer->composeLaunchApproval($launch, $event),
+            'hasBlockingConflicts' => $conflicts->contains(fn (SchedulingConflict $conflict) => (bool) $conflict->rule_is_blocking),
+            'scheduledWeekdays' => $scheduledWeekdays,
+            'selectedRoomId' => $sessions->firstWhere('room_id', '!=', null)?->room_id,
+            'selectedZoomId' => $sessions->firstWhere('zoom_account_id', '!=', null)?->zoom_account_id,
+            'selectedSpeakerId' => $sessions->firstWhere('speaker_id', '!=', null)?->speaker_id,
+            ...$resources,
         ]);
     }
 
@@ -320,6 +389,32 @@ class LaunchController extends Controller
             'rooms' => Room::query()->where('is_active', true)->orderBy('name')->get(),
             'zoomAccounts' => ZoomAccount::query()->where('is_active', true)->orderBy('name')->get(),
             'speakers' => Speaker::query()->where('is_active', true)->orderBy('full_name')->get(),
+        ];
+    }
+
+    private function schedulingCatalogs(): array
+    {
+        $resources = DB::table('rooms')
+            ->selectRaw("'room' as resource_type, id, name as label")
+            ->where('is_active', true)
+            ->unionAll(
+                DB::table('zoom_accounts')
+                    ->selectRaw("'zoom' as resource_type, id, name as label")
+                    ->where('is_active', true)
+            )
+            ->unionAll(
+                DB::table('speakers')
+                    ->selectRaw("'speaker' as resource_type, id, full_name as label")
+                    ->where('is_active', true)
+            )
+            ->orderBy('label')
+            ->get()
+            ->groupBy('resource_type');
+
+        return [
+            'rooms' => $resources->get('room', collect()),
+            'zoomAccounts' => $resources->get('zoom', collect()),
+            'speakers' => $resources->get('speaker', collect()),
         ];
     }
 }
